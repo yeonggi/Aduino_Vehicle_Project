@@ -73,3 +73,18 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+.cproject
+.project
+lib_src/RCSwitch/examples/ReceiveDemo_Advanced/helperfunctions.ino
+lib_src/RCSwitch/examples/ReceiveDemo_Advanced/output.ino
+*.pde
+lib_src/RCSwitch/examples/TypeA_WithDIPSwitches_Lightweight/TypeA_WithDIPSwitches_Lightweight.ino
+*.ino
+*.json
+*.mk
+Release/lib_src/SoftwareSerial/SoftwareSerial.d
+*.d
+*.map
+Release/Aduino_Vehicle_Project.hex
+*.elf
+Release/Aduino_Default.hex
