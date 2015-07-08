@@ -1,6 +1,7 @@
 #include "Arduino.h"
 #include "HomeAutoLight.h"
 #include <avr/sleep.h>
+#include <stdlib.h>
 
 
 //////////
@@ -466,5 +467,57 @@ int Get_Time_Data(int *time_data)
 int get_reliable_data(int* data, int data_count)
 {
 
+	//int data[] = {130,1000,2,394,130,129,2,135,132,136}; //문제가 있음 변량 하나가 너무 버리면 편차가 올라감으로
+	int mean;
+	int i = 0;
+	int ok_flag=0;
+	int variable_data_count = 0;
+	int *compare_data;
+
+    compare_data = (int*) malloc(data_count*sizeof(int)+1);
+
+    memset(compare_data,0,data_count*sizeof(int));
+
+	restart :
+
+	mean = 0;
+	variable_data_count = 0;
+	ok_flag = 0;
+
+	for (i = 0; i < data_count; i++)
+	{
+		if (compare_data[i] == 0)
+		{
+			mean = mean + data[i];
+			variable_data_count++;
+		}
+	}
+
+    if(variable_data_count > 0)
+        mean = mean / variable_data_count;
+    else
+        return -2;
+
+	printf(" mean = %d \n", mean);
+
+	for (i = 0; i < data_count; i++)
+	{
+		if(compare_data[i] == 0)
+		{
+			if (abs(mean - data[i]) > 50)
+			{
+				compare_data[i] = data[i];
+				ok_flag++;
+			}
+		}
+	}
+	if(ok_flag == data_count)
+        return -1;
+	if(ok_flag == 0)
+		free(compare_data);
+	else
+		goto restart;
+
+	return mean;
 
 }
