@@ -1,10 +1,20 @@
 #include "Arduino.h"
 #include "HomeAutoLight.h"
 #include <avr/sleep.h>
-#include <stdlib.h>
 
 
-//////////
+
+//////////global variable
+#define THRES_OF_MISS  10
+#define THRES_OF_DATA	5
+#define NOT_DEFINED_YET 0xff
+
+int fixed_distance_data;
+unsigned char miss_count;
+unsigned char hit_count;
+unsigned char mean_data_cnt;
+int Sensing_range = 120;
+
 
 /***************************Sleep Mode Class**************************************/
 SleepMode::SleepMode()
@@ -351,33 +361,40 @@ void HALS::Autolight_Body()
 
 void HALS::Autolight_Sender()
 {
-	long distance = 0;
 	int i;
+	int distance=0;
+	memset(HC_SR04.Queue,0,sizeof(int)*max_sensor_q_size);
 
-	for(i=0; i<1; i++)
+	for(i=0; i<max_sensor_q_size; i++)
 	{
 		HC_SR04.HC_SR04_generate_signal();
-		delayMicroseconds(1);
 		HC_SR04.Queue[i] = HC_SR04.HC_SR04_decode_signal();
-		distance = distance + HC_SR04.Queue[i];
+		delayMicroseconds(5);
+		//Serial.printf("--%d ",HC_SR04.Queue[i]);
 	}
-	distance = distance / 3;
 
-	if(distance > 200)
+	distance = get_reliable_data(HC_SR04.Queue,max_sensor_q_size);
+	distance = leaning_enviroment(distance);
+
+	//Serial.println("-----------------------------");
+	if(distance > 200 && distance < 0)
 	{
-		Serial.println("out of range !!!");
+		//Serial.println("out of range !!!");
 	}
-	else if(distance < 120)
+	else if(distance < Sensing_range)
 	{
-		Serial.println("distance lower than 140");
+		//Serial.println("distance lower than 120");
 		remote_control.Send_Signal('a');
-		Serial.printf("distance = %d",distance);
+		Serial.printf("distance = %d \n",distance);
+		fixed_distance_data = 0;
+		mean_data_cnt = 0;
 	}
 	else
 	{
-		Serial.print("distance = ");
-		Serial.println(distance);
+		//Serial.print("distance = ");
+		Serial.println(distance);//
 	}
+	//Serial.println("-----------------------------");
 }
 
 
@@ -466,12 +483,12 @@ int Get_Time_Data(int *time_data)
 
 int get_reliable_data(int* data, int data_count)
 {
-
-	//int data[] = {130,1000,2,394,130,129,2,135,132,136}; //문제가 있음 변량 하나가 너무 버리면 편차가 올라감으로
 	int mean;
+	int mean_2;
 	int i = 0;
 	int ok_flag=0;
 	int variable_data_count = 0;
+	int Stnadard_deviation=0;
 	int *compare_data;
 
     compare_data = (int*) malloc(data_count*sizeof(int)+1);
@@ -481,6 +498,7 @@ int get_reliable_data(int* data, int data_count)
 	restart :
 
 	mean = 0;
+	mean_2 = 0;
 	variable_data_count = 0;
 	ok_flag = 0;
 
@@ -489,31 +507,55 @@ int get_reliable_data(int* data, int data_count)
 		if (compare_data[i] == 0)
 		{
 			mean = mean + data[i];
+			mean_2 = mean_2 + pow(data[i],2);
 			variable_data_count++;
 		}
 	}
 
     if(variable_data_count > 0)
-        mean = mean / variable_data_count;
+    {
+         mean_2 = mean_2/variable_data_count ;
+         mean = mean/variable_data_count;
+
+		if ((mean_2 - pow(mean, 2)) > 0)
+			Stnadard_deviation = sqrt(mean_2 - pow(mean, 2));
+		else
+			Stnadard_deviation = 0;
+
+	     //Serial.printf("Stnadard_deviation = %d \n",Stnadard_deviation);
+
+    }
     else
+    {
+    	free(compare_data);
         return -2;
+    }
 
-	printf(" mean = %d \n", mean);
+    //Serial.printf(" mean = %d \n", mean);
 
-	for (i = 0; i < data_count; i++)
-	{
-		if(compare_data[i] == 0)
-		{
-			if (abs(mean - data[i]) > 50)
-			{
-				compare_data[i] = data[i];
-				ok_flag++;
-			}
-		}
-	}
+
+    if(Stnadard_deviation > 50)
+    {
+    	for (i = 0; i < data_count; i++)
+    	{
+    		if(compare_data[i] == 0)
+    		{
+    			if (abs(mean - data[i]) > Stnadard_deviation)
+    			{
+    				compare_data[i] = data[i];
+    				ok_flag++;
+    			}
+    		}
+    	}
+    }
+
+
 	if(ok_flag == data_count)
+	{
+		free(compare_data);
         return -1;
-	if(ok_flag == 0)
+	}
+	else if(ok_flag == 0)
 		free(compare_data);
 	else
 		goto restart;
@@ -521,3 +563,52 @@ int get_reliable_data(int* data, int data_count)
 	return mean;
 
 }
+
+int leaning_enviroment(int mean_data)
+{
+
+    // start
+	if(fixed_distance_data == 0 || fixed_distance_data == NOT_DEFINED_YET )
+	{
+		if(mean_data_cnt >= 2)
+		{
+			fixed_distance_data = mean_data;
+		}
+		else
+		{
+		    fixed_distance_data = NOT_DEFINED_YET;
+		    Sensing_range = 0;
+		}
+
+	    mean_data_cnt++;
+
+	}
+	else if((fixed_distance_data - THRES_OF_DATA) < mean_data && \
+       (fixed_distance_data + THRES_OF_DATA) >= mean_data )
+	{
+		hit_count++;
+		if(miss_count > 0)
+            miss_count--;
+	}
+	else
+	{
+		miss_count++;
+		if(hit_count > 0)
+            hit_count--;
+	}
+
+	if(miss_count > THRES_OF_MISS)
+	{
+		fixed_distance_data = mean_data;
+		miss_count = 0;
+		hit_count = 0;
+	}
+	if(hit_count > 20)
+	{
+		Sensing_range = mean_data + 10;
+		// 여기에 가까이 계속 있을 때 처리 모듈 설계 해 넣어야해
+	}
+
+	return fixed_distance_data;
+}
+

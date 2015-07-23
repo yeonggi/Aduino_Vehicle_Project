@@ -17,7 +17,7 @@
 */
 //Min Max
 
-#define max_sensor_q_size 		3
+#define max_sensor_q_size 		5
 // about operation
 #define power_saving_mode
 
@@ -37,6 +37,7 @@
 #define		triger_pin				12
 #define 	echo_pin				13
 #define 	rc_sender				10
+
 #define 	Transe_mode 			1 // Transe 1 Recieve 2
 
 /**State Definition**/
@@ -49,6 +50,7 @@ extern "C" {
 	void wakeUpNow();
 	int Get_Time_Data(int* time_data);
 	int get_reliable_data(int* data, int data_count);
+	int leaning_enviroment(int mean_data);
 
 
 }
